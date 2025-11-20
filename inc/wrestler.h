@@ -18,6 +18,12 @@ typedef enum {
     STATE_GRAPPLE_INIT, // The "Reach" / Timing Window
     STATE_GRAPPLING,    // Locked up (Result of winning the timing)
     
+    // Move States (Execution & Victim)
+    STATE_SUPLEX_EXECUTE,
+    STATE_SUPLEX_VICTIM,
+    STATE_PILEDRIVER_EXECUTE,
+    STATE_PILEDRIVER_VICTIM,
+
     // Damage States
     STATE_THROWN,       // Being tossed
     STATE_GROUNDED,     // Lying on mat (can mash to rise)
@@ -72,6 +78,10 @@ void drawWrestler(Wrestler* w);
 
 // Collision helpers
 Box getWrestlerBox(Wrestler* w);
+Box getHitbox(Wrestler* w);
 bool checkCollision(Box a, Box b);
+
+// Interaction helpers
+void applyDamage(Wrestler* victim, s16 damage, s16 stun);
 
 #endif // _WRESTLER_H_

@@ -31,8 +31,20 @@ We reject button mashing. Grappling is a "High Noon" duel.
 *   **Heavy (C)**: High Damage, High Risk.
     *   *The Soul Rule*: If you attempt a Heavy Move on an opponent with >40% Stamina, they will **Auto-Reverse** you. You must "work the body" first.
 
+## 4. Combat & Hitboxes
+Strikes use a deterministic frame-based hitbox system.
+*   **Active Frames**: Attacks only hit during specific window (e.g., Frames 4-8).
+*   **Trades**: Simultaneous hits result in a "Double KO" stun.
+*   **Interruption**: Faster attacks (Light) will stuff startup frames of slower attacks.
+
 ## Technical Pillars
 To achieve this vision on the Sega Genesis:
 1.  **Deterministic FSM**: No "floating" logic. Every frame belongs to a specific State.
 2.  **Resource-Driven**: Every action has a Stamina cost.
 3.  **Verified Logic**: All mechanics are backed by the `src/test_runner.c` test suite to ensure the math aligns with the vision.
+
+## Roadmap
+*   [x] **Hitboxes**: AABB Collision for strikes.
+*   [x] **Grapple Moves**: Implementing the actual throws (Suplex, Piledriver).
+*   [ ] **Pin System**: Implementing the 1-2-3 count.
+*   [ ] **AI**: Basic CPU opponent logic.

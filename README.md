@@ -55,5 +55,7 @@ We maintain a **Headless Integration Test System** to verify game mechanics with
 *   [x] **Momentum Economy**: Stamina, Heat, and Body Damage variables.
 *   [x] **The "Duel"**: Timing-based grapple initiation (Rock-Paper-Scissors foundation).
 *   [x] **Active Selling**: Hold 'C' on the ground to regenerate stamina.
-*   [ ] **Hitboxes**: AABB Collision for strikes.
-*   [ ] **Grapple Moves**: Implementing the actual throws (Suplex, Piledriver).
+*   [x] **Hitboxes**: AABB Collision for strikes.
+*   [x] **Grapple Moves**: Implementing the actual throws (Suplex, Piledriver).
+*   [ ] **Pin System**: Implementing the 1-2-3 count.
+*   [ ] **AI**: Basic CPU opponent logic.

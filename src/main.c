@@ -21,8 +21,57 @@ u16 p2_last_input = 0;
 #define GRAPPLE_SYNC_POINT 10
 #define GRAPPLE_WINDOW_SIZE 15 // 15 frames to input (~250ms)
 
+// Handle Striking Logic (Hitbox vs Hurtbox)
+void handleStrikes() {
+    bool p1Hits = FALSE;
+    bool p2Hits = FALSE;
+
+    // 1. Detection Phase
+    // Check P1 Attacking P2
+    Box hit1 = getHitbox(&player1);
+    if (hit1.w > 0) { 
+        Box hurt2 = getWrestlerBox(&player2);
+        if (checkCollision(hit1, hurt2)) {
+             // Only hit if P2 is not already stunned/thrown
+             if (player2.state != STATE_STUNNED && player2.state != STATE_THROWN && player2.state != STATE_GRAPPLE_INIT) {
+                 p1Hits = TRUE;
+             }
+        }
+    }
+
+    // Check P2 Attacking P1
+    Box hit2 = getHitbox(&player2);
+    if (hit2.w > 0) {
+        Box hurt1 = getWrestlerBox(&player1);
+        if (checkCollision(hit2, hurt1)) {
+             if (player1.state != STATE_STUNNED && player1.state != STATE_THROWN && player1.state != STATE_GRAPPLE_INIT) {
+                 p2Hits = TRUE;
+             }
+        }
+    }
+
+    // 2. Resolution Phase
+    if (p1Hits) {
+         applyDamage(&player2, 5, 30); // 5 dmg, 30 frame stun
+         XGM_startPlayPCM(SFX_HIT_ID, 1, SOUND_PCM_CH2);
+         VDP_drawText("HIT!", 10, 4);
+    }
+
+    if (p2Hits) {
+         applyDamage(&player1, 5, 30);
+         // If both hit, the sound might just retrigger, which is acceptable for now
+         XGM_startPlayPCM(SFX_HIT_ID, 1, SOUND_PCM_CH2);
+         VDP_drawText("HIT!", 20, 4);
+    }
+}
+
 void handleCollisions(u16 p1_input, u16 p2_input) {
     // If either player is busy, no new collision logic
+    // Exception: We allow collisions if moving, but NOT if attacking (unless we want attacks to stuff grapples?)
+    // Let's say if you are attacking, you cannot be grappled easily (or maybe you can?)
+    // For now: If attacking, ignore grapple collision
+    if (player1.state == STATE_ATTACK_LIGHT || player2.state == STATE_ATTACK_LIGHT) return;
+
     if (player1.state != STATE_IDLE && player1.state != STATE_WALKING && player1.state != STATE_RUNNING) return;
     if (player2.state != STATE_IDLE && player2.state != STATE_WALKING && player2.state != STATE_RUNNING) return;
 
@@ -115,21 +164,32 @@ void resolveGrappleResult() {
     }
 
     // Apply Win
-    winner->state = STATE_ATTACK_HEAVY; // Doing the move
-    loser->state = STATE_THROWN;        // Taking the move
     
-    // Physics impulse
-    if (winner->x < loser->x) {
-        loser->velX = FIX32(2);
-        loser->velY = FIX32(-3);
+    // Determine Move based on Button
+    if (isHeavy) {
+        winner->state = STATE_PILEDRIVER_EXECUTE;
+        loser->state = STATE_PILEDRIVER_VICTIM;
+        
+        winner->heat += 25;
+        loser->stamina -= 25;
+        loser->bodyDamage += 10;
     } else {
-        loser->velX = FIX32(-2);
-        loser->velY = FIX32(-3);
+        // Medium (B) or Light (A) -> Suplex (for now)
+        // Ideally A could be a simple irish whip or body slam, B suplex
+        winner->state = STATE_SUPLEX_EXECUTE;
+        loser->state = STATE_SUPLEX_VICTIM;
+        
+        winner->heat += 15;
+        loser->stamina -= 15;
+        loser->bodyDamage += 5;
     }
     
-    winner->heat += 15;
-    loser->stamina -= 15;
-    loser->bodyDamage += 5;
+    winner->stateTimer = 0;
+    loser->stateTimer = 0;
+    
+    // Reset Physics
+    winner->velX = FIX32(0); winner->velY = FIX32(0);
+    loser->velX = FIX32(0); loser->velY = FIX32(0);
 
     XGM_startPlayPCM(SFX_HIT_ID, 1, SOUND_PCM_CH2);
 }
@@ -209,6 +269,17 @@ int main() {
         p1_last_input = p1_current;
         p2_last_input = p2_current;
 
+        // 0. Neutral Input Handling (Strikes)
+        // Only if IDLE/WALKING
+        if ((player1.state == STATE_IDLE || player1.state == STATE_WALKING) && (p1_pressed & BUTTON_A)) {
+            player1.state = STATE_ATTACK_LIGHT;
+            player1.stateTimer = 0;
+        }
+        if ((player2.state == STATE_IDLE || player2.state == STATE_WALKING) && (p2_pressed & BUTTON_A)) {
+            player2.state = STATE_ATTACK_LIGHT;
+            player2.stateTimer = 0;
+        }
+
         // Input Buffering for Grapple Phase
         if (player1.state == STATE_GRAPPLE_INIT) {
             if (player1.stateTimer >= GRAPPLE_SYNC_POINT) {
@@ -234,6 +305,8 @@ int main() {
 
         handleCollisions(p1_current, p2_current);
         
+        handleStrikes();
+
         // Run the duel logic
         processGrappleLogic();
 

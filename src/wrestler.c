@@ -54,10 +54,6 @@ void updateAnimation(Wrestler* w) {
         case STATE_WALKING:
         case STATE_RUNNING:
             // Toggle between Walk 1 and Walk 2 every 10 frames
-            // We use a global timer or the wrestler's state timer if it resets?
-            // Let's use SYS_getCounter() or just a simple modulo on a global tick.
-            // Actually, w->stateTimer isn't reliable for walking if we don't reset it.
-            // Let's use the low bits of x/y position or a simple counter.
             {
                 u32 tick = getTick();
                 if ((tick >> 4) & 1) {
@@ -90,6 +86,23 @@ void updateAnimation(Wrestler* w) {
             // Reuse Grapple frame for throw animation for now
             SPR_setFrame(w->sprite, FRAME_GRAPPLE);
             break;
+
+        case STATE_ATTACK_LIGHT:
+            // Use Walk 2 (arm out?) or Grapple for now
+            SPR_setFrame(w->sprite, FRAME_GRAPPLE);
+            break;
+
+        case STATE_SUPLEX_EXECUTE:
+        case STATE_SUPLEX_VICTIM:
+        case STATE_PILEDRIVER_EXECUTE:
+        case STATE_PILEDRIVER_VICTIM:
+             // For now, reuse Grapple/Thrown frames until we add new art
+             if (w->state == STATE_SUPLEX_EXECUTE || w->state == STATE_PILEDRIVER_EXECUTE) {
+                 SPR_setFrame(w->sprite, FRAME_GRAPPLE);
+             } else {
+                 SPR_setFrame(w->sprite, FRAME_THROWN);
+             }
+             break;
             
         default:
             SPR_setFrame(w->sprite, FRAME_IDLE);
@@ -187,13 +200,74 @@ void updateWrestler(Wrestler* w, u16 input) {
             break;
 
         case STATE_ATTACK_HEAVY:
-            // Throwing someone
+            // Throwing someone (Generic Toss)
              w->stateTimer++;
             if (w->stateTimer > 20) {
                 w->state = STATE_IDLE;
             }
             break;
+
+        case STATE_SUPLEX_EXECUTE:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            w->stateTimer++;
+            // 60 Frame Animation
+            if (w->stateTimer > 60) {
+                w->state = STATE_IDLE;
+            }
+            break;
+
+        case STATE_SUPLEX_VICTIM:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            w->stateTimer++;
+            // Follow attacker logic would go here (pinning sprite to attacker)
+            if (w->stateTimer > 60) {
+                w->state = STATE_GROUNDED; // Hard knock down
+                w->stateTimer = 0; // Reset timer for grounded state
+            }
+            break;
+
+        case STATE_PILEDRIVER_EXECUTE:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            w->stateTimer++;
+            // 90 Frame Animation (Slower, more damage)
+            if (w->stateTimer > 90) {
+                w->state = STATE_IDLE; // Could go to taunt?
+            }
+            break;
+
+        case STATE_PILEDRIVER_VICTIM:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            w->stateTimer++;
+            if (w->stateTimer > 90) {
+                w->state = STATE_GROUNDED;
+                w->stateTimer = 0;
+            }
+            break;
+
+        case STATE_ATTACK_LIGHT:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            w->stateTimer++;
+            // Quick jab: Active frames 4-8, recovery 15
+            if (w->stateTimer > 15) {
+                w->state = STATE_IDLE;
+            }
+            break;
             
+        case STATE_STUNNED:
+             w->velX = FIX32(0);
+             w->velY = FIX32(0);
+             w->stateTimer++;
+             if (w->stateTimer > w->stunValue) {
+                 w->state = STATE_IDLE;
+                 w->stunValue = 0;
+             }
+             break;
+
         default:
             break;
     }
@@ -225,9 +299,40 @@ Box getWrestlerBox(Wrestler* w) {
     return b;
 }
 
+Box getHitbox(Wrestler* w) {
+    Box b = {0, 0, 0, 0};
+    
+    // Only generating hitboxes in attack states
+    if (w->state == STATE_ATTACK_LIGHT) {
+        // Active Frames 4-8
+        if (w->stateTimer >= 4 && w->stateTimer <= 8) {
+            b.y = fix32ToInt(w->y) + 8;
+            b.w = 16;
+            b.h = 8;
+            
+            if (w->facingRight) {
+                b.x = fix32ToInt(w->x) + 20;
+            } else {
+                b.x = fix32ToInt(w->x) - 10;
+            }
+        }
+    }
+    return b;
+}
+
 bool checkCollision(Box a, Box b) {
     return (a.x < b.x + b.w &&
             a.x + a.w > b.x &&
             a.y < b.y + b.h &&
             a.y + a.h > b.y);
+}
+
+void applyDamage(Wrestler* victim, s16 damage, s16 stun) {
+    victim->stamina -= damage;
+    victim->stunValue = stun;
+    victim->state = STATE_STUNNED;
+    victim->stateTimer = 0;
+    
+    // Clamp stamina
+    if (victim->stamina < 0) victim->stamina = 0;
 }
