@@ -1,5 +1,6 @@
 #include "../inc/test_runner.h"
 #include "../inc/wrestler.h"
+#include "../inc/ai.h"
 
 // Access to globals from main.c
 extern Wrestler player1;
@@ -9,11 +10,17 @@ extern void handleStrikes();
 extern void processGrappleLogic();
 extern void updateWrestler(Wrestler* w, u16 input);
 
+// Mock AI
+AIController testAI;
+
 // Helper to reset state between tests
 void reset_gamestate() {
     initWrestler(&player1, FIX32(100), FIX32(120));
     initWrestler(&player2, FIX32(200), FIX32(120));
     player2.facingRight = FALSE;
+    
+    // Init Test AI for Player 2
+    initAI(&testAI, &player2, &player1, AI_MEDIUM);
 }
 
 // TEST 1: Momentum Economy Initialization
@@ -316,6 +323,99 @@ bool test_input_lockout() {
     return TRUE;
 }
 
+// TEST 13: Kickout Mechanism
+bool test_kickout_mechanism() {
+    reset_gamestate();
+    
+    // Setup: P2 is Pinned with medium difficulty
+    player2.state = STATE_PINNED;
+    player2.mashCount = 20; // Needs 4 mashes (5 per mash)
+    player2.stamina = 50;
+    
+    // Action 1: Press A (Mash 1)
+    // updateWrestler checks for RISING EDGE, so we must toggle input
+    // Frame 1: Press A
+    updateWrestler(&player2, BUTTON_A);
+    if (player2.mashCount != 15) return FALSE; // 20 - 5
+    
+    // Frame 2: Hold A (No new mash)
+    updateWrestler(&player2, BUTTON_A);
+    if (player2.mashCount != 15) return FALSE; // Should not change
+    
+    // Frame 3: Release A
+    updateWrestler(&player2, 0);
+    
+    // Frame 4: Press B (Mash 2)
+    updateWrestler(&player2, BUTTON_B);
+    if (player2.mashCount != 10) return FALSE;
+    
+    // Frame 5: Release
+    updateWrestler(&player2, 0);
+    
+    // Frame 6: Press C (Mash 3)
+    updateWrestler(&player2, BUTTON_C);
+    if (player2.mashCount != 5) return FALSE;
+
+    // Frame 7: Release
+    updateWrestler(&player2, 0);
+
+    // Frame 8: Press A (Mash 4 - KICKOUT!)
+    updateWrestler(&player2, BUTTON_A);
+    
+    // Assert: State changed to GROUNDED (Kickout)
+    if (player2.state != STATE_GROUNDED) return FALSE;
+    
+    // Assert: Adrenaline Boost (+10 Stamina)
+    // 50 + 10 = 60
+    if (player2.stamina != 60) return FALSE;
+    
+    return TRUE;
+}
+
+// TEST 14: AI Approach (Basic Navigation)
+bool test_ai_approach() {
+    reset_gamestate();
+    
+    // Setup: P1 far left, P2 far right
+    player1.x = FIX32(10);
+    player2.x = FIX32(200);
+    
+    // AI controls P2
+    u16 aiInput = updateAI(&testAI);
+    
+    // Assert: AI should want to move LEFT (towards P1)
+    if (!(aiInput & BUTTON_LEFT)) return FALSE;
+    if (aiInput & BUTTON_RIGHT) return FALSE;
+    
+    return TRUE;
+}
+
+// TEST 15: AI Decision (Grapple)
+bool test_ai_grapple() {
+    reset_gamestate();
+    
+    // Setup: Grapple Init
+    player2.state = STATE_GRAPPLE_INIT;
+    testAI.difficulty = AI_HARD; // Reaction 0 frames
+    
+    // Frame 10 (Sync Point)
+    player2.stateTimer = 10;
+    player2.stamina = 100; // Should use Heavy (C)
+    
+    u16 input = updateAI(&testAI);
+    if (!(input & BUTTON_C)) return FALSE;
+    
+    // Low Stamina -> Safe Move (B)
+    player2.stamina = 30;
+    // Reset input state in AI (it latches)
+    testAI.desiredInput = 0; 
+    
+    input = updateAI(&testAI);
+    if (!(input & BUTTON_B)) return FALSE;
+    
+    return TRUE;
+}
+
 bool run_all_tests() {
     VDP_drawText("Running Tests...", 10, 10);
     
@@ -378,7 +478,21 @@ bool run_all_tests() {
         VDP_drawText("FAIL: Input Lockout", 10, 12);
         return FALSE;
     }
+
+    if (!test_kickout_mechanism()) {
+        VDP_drawText("FAIL: Kickout Mech", 10, 12);
+        return FALSE;
+    }
+    
+    if (!test_ai_approach()) {
+        VDP_drawText("FAIL: AI Approach", 10, 12);
+        return FALSE;
+    }
+
+    if (!test_ai_grapple()) {
+        VDP_drawText("FAIL: AI Decision", 10, 12);
+        return FALSE;
+    }
     
     return TRUE;
 }
-

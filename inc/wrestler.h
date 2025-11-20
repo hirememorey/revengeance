@@ -29,7 +29,12 @@ typedef enum {
     STATE_GROUNDED,     // Lying on mat (can mash to rise)
     STATE_SELLING,      // Holding button to rest (fast regen)
     STATE_STUNNED,      // Standing but groggy (vulnerable)
-    STATE_PINNED        // Shoulders down
+    
+    // Pin System
+    STATE_PINNING,      // Attacker holding the pin
+    STATE_PINNED,       // Victim shoulders down
+    STATE_WIN,          // Victory Animation
+    STATE_LOSE          // Defeat Animation
 } WrestlerState;
 
 // FIRST PRINCIPLE: Entity Structure
@@ -49,6 +54,7 @@ typedef struct {
     s16 heat;           // Momentum. Gains on successful moves.
     s16 bodyDamage;     // Long-term wear. Reduces max speed/stamina.
     s16 stunValue;      // Current "dizziness". If high, you are vulnerable.
+    s16 mashCount;      // For kickouts/struggles
 
     // State Management
     WrestlerState state;
@@ -60,7 +66,8 @@ typedef struct {
     
     // Input Buffer for Timing
     // We capture the input pressed *during* the specific window
-    u16 bufferedInput;  
+    u16 bufferedInput;
+    u16 lastInput; // To detect edge-triggered inputs (mashing)
 } Wrestler;
 
 // Collision Box - Using SGDK's built-in Box struct

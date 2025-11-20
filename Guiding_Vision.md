@@ -46,5 +46,5 @@ To achieve this vision on the Sega Genesis:
 ## Roadmap
 *   [x] **Hitboxes**: AABB Collision for strikes.
 *   [x] **Grapple Moves**: Implementing the actual throws (Suplex, Piledriver).
-*   [ ] **Pin System**: Implementing the 1-2-3 count.
-*   [ ] **AI**: Basic CPU opponent logic.
+*   [x] **Pin System**: Implementing the 1-2-3 count.
+*   [x] **AI**: Basic CPU opponent logic.

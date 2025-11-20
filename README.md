@@ -57,5 +57,5 @@ We maintain a **Headless Integration Test System** to verify game mechanics with
 *   [x] **Active Selling**: Hold 'C' on the ground to regenerate stamina.
 *   [x] **Hitboxes**: AABB Collision for strikes.
 *   [x] **Grapple Moves**: Implementing the actual throws (Suplex, Piledriver).
-*   [ ] **Pin System**: Implementing the 1-2-3 count.
-*   [ ] **AI**: Basic CPU opponent logic.
+*   [x] **Pin System**: Implementing the 1-2-3 count.
+*   [x] **AI**: Basic CPU opponent logic.

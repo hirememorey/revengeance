@@ -9,4 +9,5 @@ out/src/main.o: src/main.c /sgdk/inc/genesis.h /sgdk/inc/types.h \
  /sgdk/inc/sound.h /sgdk/inc/xgm.h /sgdk/inc/z80_ctrl.h \
  /sgdk/inc/ym2612.h /sgdk/inc/psg.h /sgdk/inc/joy.h /sgdk/inc/timer.h \
  /sgdk/inc/task.h /sgdk/inc/task_cst.h src/../inc/wrestler.h \
- src/../res/resources.h src/../inc/test_runner.h
+ src/../inc/ai.h src/../inc/wrestler.h src/../res/resources.h \
+ src/../inc/test_runner.h

@@ -28,11 +28,13 @@ void initWrestler(Wrestler* w, fix32 startX, fix32 startY) {
     w->heat = 0;
     w->bodyDamage = 0;
     w->stunValue = 0;
+    w->mashCount = 0;
 
     w->state = STATE_IDLE;
     w->stateTimer = 0;
     w->facingRight = TRUE;
     w->bufferedInput = 0;
+    w->lastInput = 0;
     
     // Initialize Hardware Sprite
     w->sprite = SPR_addSprite(&wrestler_sprite, fix32ToInt(w->x), fix32ToInt(w->y), TILE_ATTR(PAL0, TRUE, FALSE, FALSE));
@@ -79,7 +81,12 @@ void updateAnimation(Wrestler* w) {
             
         case STATE_GROUNDED:
         case STATE_SELLING:
+        case STATE_PINNED: // Lying down
             SPR_setFrame(w->sprite, FRAME_GROUNDED);
+            break;
+            
+        case STATE_PINNING: // On top
+            SPR_setFrame(w->sprite, FRAME_GRAPPLE); // Use grapple frame (kneeling-ish) for now
             break;
 
         case STATE_ATTACK_HEAVY:
@@ -103,6 +110,13 @@ void updateAnimation(Wrestler* w) {
                  SPR_setFrame(w->sprite, FRAME_THROWN);
              }
              break;
+             
+        case STATE_WIN:
+            SPR_setFrame(w->sprite, FRAME_GRAPPLE); // Arms up?
+            break;
+        case STATE_LOSE:
+            SPR_setFrame(w->sprite, FRAME_GROUNDED);
+            break;
             
         default:
             SPR_setFrame(w->sprite, FRAME_IDLE);
@@ -111,6 +125,10 @@ void updateAnimation(Wrestler* w) {
 }
 
 void updateWrestler(Wrestler* w, u16 input) {
+    // Detect pressed buttons (Rising Edge)
+    u16 pressed = input & ~w->lastInput;
+    w->lastInput = input;
+
     // 1. STATE MANAGEMENT
     switch(w->state) {
         case STATE_IDLE:
@@ -146,15 +164,12 @@ void updateWrestler(Wrestler* w, u16 input) {
         case STATE_GRAPPLE_INIT:
             w->velX = FIX32(0);
             w->velY = FIX32(0);
-            // Input buffering logic will be handled in main or a specialized function
-            // For now, just track timer
             w->stateTimer++;
             break;
 
         case STATE_GRAPPLING:
             w->velX = FIX32(0);
             w->velY = FIX32(0);
-            // Logic moved to resolveGrapple in main for now
             break;
 
         case STATE_THROWN:
@@ -170,7 +185,6 @@ void updateWrestler(Wrestler* w, u16 input) {
             w->velY = FIX32(0);
             
             // Check for Active Sell (Holding C/Z)
-            // Assuming BUTTON_C is mapped to sell for 3-button controller compatibility
             if (input & BUTTON_C) {
                 w->state = STATE_SELLING;
                 break;
@@ -198,9 +212,39 @@ void updateWrestler(Wrestler* w, u16 input) {
                 // Keep current timer so they don't get stuck forever
             }
             break;
+            
+        case STATE_PINNING:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            w->stateTimer++;
+            // Exit/Win logic handled in main or via opponent kickout
+            break;
+            
+        case STATE_PINNED:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            w->stateTimer++; // Used for Count (1-2-3)
+            
+            // Kickout Mechanic: Mashing (A, B, or C)
+            if (pressed & (BUTTON_A | BUTTON_B | BUTTON_C)) {
+                w->mashCount -= 5; // Reduce required mash
+            }
+            
+            if (w->mashCount <= 0) {
+                // KICKOUT!
+                w->state = STATE_GROUNDED;
+                w->stateTimer = 0;
+                w->stamina += 10; // Adrenaline boost
+            }
+            break;
+
+        case STATE_WIN:
+        case STATE_LOSE:
+            w->velX = FIX32(0);
+            w->velY = FIX32(0);
+            break;
 
         case STATE_ATTACK_HEAVY:
-            // Throwing someone (Generic Toss)
              w->stateTimer++;
             if (w->stateTimer > 20) {
                 w->state = STATE_IDLE;
@@ -211,7 +255,6 @@ void updateWrestler(Wrestler* w, u16 input) {
             w->velX = FIX32(0);
             w->velY = FIX32(0);
             w->stateTimer++;
-            // 60 Frame Animation
             if (w->stateTimer > 60) {
                 w->state = STATE_IDLE;
             }
@@ -221,10 +264,9 @@ void updateWrestler(Wrestler* w, u16 input) {
             w->velX = FIX32(0);
             w->velY = FIX32(0);
             w->stateTimer++;
-            // Follow attacker logic would go here (pinning sprite to attacker)
             if (w->stateTimer > 60) {
                 w->state = STATE_GROUNDED; // Hard knock down
-                w->stateTimer = 0; // Reset timer for grounded state
+                w->stateTimer = 0;
             }
             break;
 
@@ -232,9 +274,8 @@ void updateWrestler(Wrestler* w, u16 input) {
             w->velX = FIX32(0);
             w->velY = FIX32(0);
             w->stateTimer++;
-            // 90 Frame Animation (Slower, more damage)
             if (w->stateTimer > 90) {
-                w->state = STATE_IDLE; // Could go to taunt?
+                w->state = STATE_IDLE;
             }
             break;
 
@@ -252,7 +293,6 @@ void updateWrestler(Wrestler* w, u16 input) {
             w->velX = FIX32(0);
             w->velY = FIX32(0);
             w->stateTimer++;
-            // Quick jab: Active frames 4-8, recovery 15
             if (w->stateTimer > 15) {
                 w->state = STATE_IDLE;
             }

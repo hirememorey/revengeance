@@ -1,5 +1,6 @@
 #include <genesis.h>
 #include "../inc/wrestler.h"
+#include "../inc/ai.h"
 #include "../res/resources.h"
 
 // Include Test Runner Header
@@ -10,6 +11,7 @@
 // Global entities
 Wrestler player1;
 Wrestler player2;
+    AIController aiPlayer2;
 
 u16 p1_last_input = 0;
 u16 p2_last_input = 0;
@@ -239,6 +241,9 @@ int main() {
     initWrestler(&player1, FIX32(100), FIX32(120)); 
     initWrestler(&player2, FIX32(200), FIX32(120));
     player2.facingRight = FALSE;
+    
+    // Initialize AI
+    initAI(&aiPlayer2, &player2, &player1, AI_MEDIUM);
 
     // === TEST HARNESS ENTRY POINT ===
     #ifdef TEST_BUILD
@@ -261,7 +266,13 @@ int main() {
 
     while(1) {
         u16 p1_current = JOY_readJoypad(JOY_1);
-        u16 p2_current = JOY_readJoypad(JOY_2);
+        
+        // AI Update
+        u16 p2_current = updateAI(&aiPlayer2);
+        // Allow P2 Controller override for debug/2P mode if needed (Press Start?)
+        if (JOY_readJoypad(JOY_2) & BUTTON_START) {
+             p2_current = JOY_readJoypad(JOY_2);
+        }
 
         u16 p1_pressed = p1_current & ~p1_last_input;
         u16 p2_pressed = p2_current & ~p2_last_input;
@@ -278,6 +289,90 @@ int main() {
         if ((player2.state == STATE_IDLE || player2.state == STATE_WALKING) && (p2_pressed & BUTTON_A)) {
             player2.state = STATE_ATTACK_LIGHT;
             player2.stateTimer = 0;
+        }
+        
+        // 0.1 Pin Initiation
+        // P1 attempts pin on P2
+        if ((player1.state == STATE_IDLE || player1.state == STATE_WALKING) && 
+            (player2.state == STATE_GROUNDED || player2.state == STATE_SELLING)) {
+            
+            int dist = fix32ToInt(player1.x) - fix32ToInt(player2.x);
+            if(dist < 0) dist = -dist;
+
+            if ((p1_pressed & BUTTON_A) && dist < 24) {
+                player1.state = STATE_PINNING;
+                player2.state = STATE_PINNED;
+                player1.stateTimer = 0;
+                player2.stateTimer = 0;
+                
+                // Calculate Mash Difficulty
+                // Base 30 + Damage. Less Stamina = Harder.
+                // mashCount = 30 + (100 - stamina) + damage/2
+                player2.mashCount = 30 + (100 - player2.stamina) + (player2.bodyDamage >> 1);
+                
+                VDP_drawText("PIN!", 15, 10);
+            }
+        }
+
+        // P2 attempts pin on P1
+        if ((player2.state == STATE_IDLE || player2.state == STATE_WALKING) && 
+            (player1.state == STATE_GROUNDED || player1.state == STATE_SELLING)) {
+            
+            int dist = fix32ToInt(player2.x) - fix32ToInt(player1.x);
+            if(dist < 0) dist = -dist;
+
+            if ((p2_pressed & BUTTON_A) && dist < 24) {
+                player2.state = STATE_PINNING;
+                player1.state = STATE_PINNED;
+                player2.stateTimer = 0;
+                player1.stateTimer = 0;
+                
+                player1.mashCount = 30 + (100 - player1.stamina) + (player1.bodyDamage >> 1);
+                
+                VDP_drawText("PIN!", 15, 10);
+            }
+        }
+
+        // 0.2 Pin Resolution (Kickout or Win)
+        if (player1.state == STATE_PINNING) {
+            // Check if P2 broke out (State changed to GROUNDED in updateWrestler)
+            if (player2.state == STATE_GROUNDED) {
+                player1.state = STATE_STUNNED; // Pushed off
+                player1.stateTimer = 0;
+                player1.stunValue = 20; // Brief stun
+                VDP_drawText("KICKOUT!", 15, 10);
+                VDP_clearText(15, 12, 10); // Clear count
+            } else {
+                // Count Logic
+                // 60 frames = 1 sec.
+                if (player1.stateTimer == 60) VDP_drawText("ONE!  ", 15, 12);
+                if (player1.stateTimer == 120) VDP_drawText("TWO!  ", 15, 12);
+                if (player1.stateTimer == 180) {
+                    VDP_drawText("THREE!", 15, 12);
+                    player1.state = STATE_WIN;
+                    player2.state = STATE_LOSE;
+                    VDP_drawText("WINNER: P1", 12, 14);
+                }
+            }
+        }
+        
+        if (player2.state == STATE_PINNING) {
+            if (player1.state == STATE_GROUNDED) {
+                player2.state = STATE_STUNNED; 
+                player2.stateTimer = 0;
+                player2.stunValue = 20;
+                VDP_drawText("KICKOUT!", 15, 10);
+                VDP_clearText(15, 12, 10);
+            } else {
+                if (player2.stateTimer == 60) VDP_drawText("ONE!  ", 15, 12);
+                if (player2.stateTimer == 120) VDP_drawText("TWO!  ", 15, 12);
+                if (player2.stateTimer == 180) {
+                    VDP_drawText("THREE!", 15, 12);
+                    player2.state = STATE_WIN;
+                    player1.state = STATE_LOSE;
+                    VDP_drawText("WINNER: P2", 12, 14);
+                }
+            }
         }
 
         // Input Buffering for Grapple Phase
@@ -302,6 +397,20 @@ int main() {
         // Pass 'current' for movement, 'pressed' is handled by buffering logic above
         updateWrestler(&player1, p1_current);
         updateWrestler(&player2, p2_current); 
+        
+        // Clear Pin Text if no longer pinning
+        if (player1.state != STATE_PINNING && player2.state != STATE_PINNING && 
+            player1.state != STATE_WIN && player2.state != STATE_WIN && 
+            player1.stateTimer == 0 && player2.stateTimer == 0) { // HACK: Check timers to avoid clearing immediately on kickout frame
+             // Actually, simpler: if state transitioned, clear after some time. 
+             // For now, let's leave it or clear it when state is IDLE.
+        }
+        
+        if (player1.state == STATE_IDLE && player2.state == STATE_IDLE) {
+             // Reset text occasionally? 
+             // VDP_clearText(15, 10, 10);
+             // VDP_clearText(15, 12, 10);
+        }
 
         handleCollisions(p1_current, p2_current);
         
